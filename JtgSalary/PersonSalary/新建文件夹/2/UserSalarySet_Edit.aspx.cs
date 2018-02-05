@@ -1,0 +1,372 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+using System.Web.UI;
+using System.Web.UI.WebControls;
+using System.Data.SqlClient;
+using CyxPack.CommonOperation;
+using System.Data;
+using System.Diagnostics;
+using CyxPack.OperateSqlServer;
+using JtgSalary.MobilePlatform;
+
+namespace JtgTMS.PersonSalary
+{
+    public partial class UserSalarySet_Edit : System.Web.UI.Page
+    {
+        public int _UserSalarySetID = 0;
+        private string _TableRecGuid = "";
+
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            SysClass.SysGlobal.CheckSysIsLogined();
+            if (Request.Params["UserSalarySetID"] != null)
+            {
+                _UserSalarySetID = int.Parse(Request.Params["UserSalarySetID"]);
+            }
+            _TableRecGuid = SysClass.SysUserSalary.GetTableRecGuidBySetID(_UserSalarySetID);
+            if (!Page.IsPostBack)
+            {
+                BindPageData();
+            }
+        }
+
+        private void BindPageData()
+        {
+            SqlDataReader sdr = SysClass.SysUserSalary.GetSingleUserSalarySetByReader(_UserSalarySetID);
+            if (sdr.Read())
+            {
+                if (_UserSalarySetID > 0)
+                {
+                    txtBeginYears.Text = sdr["BeginYears"].ToString();
+                    txtEndYears.Text = sdr["EndYears"].ToString();
+                    txtDescription.Text = sdr["Description"].ToString();
+                }
+            }
+            sdr.Close();
+
+            CyxPack.CommonOperation.DataBinder.BindGridViewData(gvLists, SysClass.SysUserSalary.GetUserSalarySetFieldsLstByDataSet(_UserSalarySetID, ""));
+        }
+
+        private bool SaveCheck()
+        {
+            bool bFlag = true;
+            if (txtBeginYears.Text.Length == 0)
+            {
+                bFlag = false;
+                Dialog.OpenDialogInAjax(txtBeginYears, "生效月份不能为空！");
+            }
+            else if (txtEndYears.Text.Length == 0)
+            {
+                bFlag = false;
+                Dialog.OpenDialogInAjax(txtBeginYears, "失效月份不能为空！");
+            }
+            return bFlag;
+        }
+
+        protected void btnApply_Click(object sender, EventArgs e)
+        {
+            if (SaveCheck())
+            {
+                if (_TableRecGuid.Length == 0)
+                {
+                    _TableRecGuid = SysClass.SysGlobal.GetCreateGUID();
+                }
+                string saveDefaultPackToolMemberSql = GetSaveDefaultPackToolMemberSQL();
+                Debug.WriteLine(saveDefaultPackToolMemberSql);
+
+                string[] FieldValues =
+                {
+                    _TableRecGuid,
+                    txtBeginYears.Text,
+                    txtEndYears.Text,
+                    txtDescription.Text,
+                };
+
+                //SysClass.SysUserSalary.UpdateSingleUserSalarySet(_UserSalarySetID, FieldValues);
+                //_UserSalarySetID = SysClass.SysUserSalary.GetSingleUserSalarySetByReader(_TableRecGuid);
+
+                if (SysClass.SysUserSalary.UpdateSingleUserSalarySetFields(GetSavePackToolMemberSQL(_TableRecGuid)) > 0)
+                {
+                Debug.WriteLine("YXW Test3");
+                    _UserSalarySetID = SysClass.SysUserSalary.GetSingleUserSalarySetByReader(_TableRecGuid);
+                    //Add by lk 20151214 start
+                    if (_UserSalarySetID == 0)
+                    {
+                Debug.WriteLine("YXW Test4");
+                        int iresult =
+                            SysClass.SysUserSalary.UpdateUserSalaryFieldsInfo(GetUpdUserSalaryFieldsInfoSQL());
+                Debug.WriteLine("YXW Test5");
+                    }
+                    //Add by lk 20151214 end
+                    Dialog.OpenDialogInAjax(upForm, "恭喜您，保存信息成功……", "UserSalarySet_Lst.aspx");
+                }
+                SysClass.SysUserSalary.UpdateDefaultSalarySet(saveDefaultPackToolMemberSql);
+            }
+        }
+
+        private string GetSaveDefaultPackToolMemberSQL()
+        {
+            string sUpdateDefaultSQL = "";
+            DataSet ds = LoadDefaultPackToolMember();
+            for (int i = 0; i < ds.Tables[0].Rows.Count; i++)
+            {
+                sUpdateDefaultSQL += " Insert Into UserSalarySet_Fields_Info (TableRecGuid"
+                                     + ", MasterID" + ", FieldName" + ", UserFieldTitle" + ", UserIsVisible" + ", SortID)"
+                                     + " Values( '"
+                                     + ds.Tables[0].Rows[i]["TableRecGuid"].ToString()
+                                     + "',0"
+                                     + ",'" + ds.Tables[0].Rows[i]["FieldName"].ToString()
+                                     + "','" + ds.Tables[0].Rows[i]["UserFieldTitle"].ToString()
+                                     + "'," + ds.Tables[0].Rows[i]["UserIsVisible"].ToString()
+                                     + "," + i.ToString() + ");";
+            }
+            return sUpdateDefaultSQL;
+        }
+
+        private string GetSavePackToolMemberSQL(string BillTableRecGuid)
+        {
+            string sUpdateSQL = "", sIDs = "";
+
+            DataSet ds = LoadOldPackToolMember("");
+            Debug.WriteLine(GetData.ShowDataSetContent(ds));
+            for (int i = 0; i < ds.Tables[0].Rows.Count; i++)
+            {
+                if (int.Parse(ds.Tables[0].Rows[i]["ID"].ToString()) == 0)
+                {
+                    sUpdateSQL = sUpdateSQL + " Insert Into UserSalarySet_Fields_Info (TableRecGuid"
+                        + ", MasterID"
+                        + ", FieldName"
+                        + ", UserFieldTitle"    
+                        + ", UserIsVisible"
+                        + ", SortID)"
+                        + " Select "
+                        + "'" + ds.Tables[0].Rows[i]["TableRecGuid"].ToString() + "'"
+                        + ",ID"
+                        + ",'" + ds.Tables[0].Rows[i]["FieldName"].ToString() + "'"
+                        + ",'" + ds.Tables[0].Rows[i]["UserFieldTitle"].ToString() + "'"
+                        + "," + ds.Tables[0].Rows[i]["UserIsVisible"].ToString() + ""
+                        + "," + i.ToString()
+                        + " From UserSalarySet_Info Where TableRecGuid = '" + BillTableRecGuid + "';";
+                }
+                else
+                {
+                    if (sIDs.Length > 0)
+                    {
+                        sIDs = sIDs + ",";
+                    }
+                    sIDs = sIDs + ds.Tables[0].Rows[i]["ID"].ToString();
+
+                    sUpdateSQL = sUpdateSQL + " Update UserSalarySet_Fields_Info Set "
+                            + " FieldName='" + ds.Tables[0].Rows[i]["FieldName"].ToString() + "'"
+                            + ", UserFieldTitle='" + ds.Tables[0].Rows[i]["UserFieldTitle"].ToString() + "'"
+                            + ", UserIsVisible=" + ds.Tables[0].Rows[i]["UserIsVisible"].ToString() + ""
+                            + ", SortID=" + i.ToString()
+                            + " Where ID = " + ds.Tables[0].Rows[i]["ID"].ToString() + ";";
+                }
+            }
+
+            if (sIDs.Length > 0)
+            {
+                sUpdateSQL = " Delete From UserSalarySet_Fields_Info Where ID not in (" + sIDs + ") And MasterID=" + _UserSalarySetID.ToString() + "; " + sUpdateSQL;
+            }
+            else
+            {
+                sUpdateSQL = " Delete From UserSalarySet_Fields_Info Where MasterID=" + _UserSalarySetID.ToString() + "; " + sUpdateSQL;
+            }
+            Debug.WriteLine(sUpdateSQL);
+
+            return sUpdateSQL;
+        }       
+
+        protected void btnCancel_Click(object sender, EventArgs e)
+        {
+            Response.Redirect("UserSalarySet_Lst.aspx");
+        }
+
+        protected void gvLists_RowCommand(object sender, GridViewCommandEventArgs e)
+        {
+            if (e.CommandName == "del")
+            {
+                DataSet ds = LoadOldPackToolMember("," + e.CommandArgument.ToString() + ",");
+                gvLists.DataSource = ds.Tables[0].DefaultView;
+                gvLists.DataBind();
+            }
+            else if (e.CommandName == "Up")
+            {
+                DataSet Oldds = LoadOldPackToolMember("");
+
+                int _SortID = int.Parse(e.CommandArgument.ToString());
+
+                DataSet ds = SysClass.SysUserSalary.GetUserSalarySetFieldsLstByDataSet(_UserSalarySetID, " AND 1<>1");
+
+                DataRow OldRow = ds.Tables[0].NewRow();
+
+                for (int i = 0; i < Oldds.Tables[0].Rows.Count; i++)
+                {
+                    if (i == _SortID - 1)
+                    {
+                        OldRow["TableRecGuid"] = Oldds.Tables[0].Rows[i]["TableRecGuid"].ToString();
+                        OldRow["ID"] = int.Parse(Oldds.Tables[0].Rows[i]["ID"].ToString());
+                        OldRow["FieldName"] = Oldds.Tables[0].Rows[i]["FieldName"].ToString();
+                        OldRow["FieldType"] = Oldds.Tables[0].Rows[i]["FieldType"].ToString();
+                        OldRow["UserFieldTitle"] = Oldds.Tables[0].Rows[i]["UserFieldTitle"].ToString();
+                        OldRow["UserIsVisible"] = int.Parse(Oldds.Tables[0].Rows[i]["UserIsVisible"].ToString());
+                    }
+                    else
+                    {
+                        DataRow row = ds.Tables[0].NewRow();
+
+                        row["TableRecGuid"] = Oldds.Tables[0].Rows[i]["TableRecGuid"];
+                        row["ID"] = Oldds.Tables[0].Rows[i]["ID"];
+                        row["FieldName"] = Oldds.Tables[0].Rows[i]["FieldName"];
+                        row["FieldType"] = Oldds.Tables[0].Rows[i]["FieldType"].ToString();
+                        row["UserFieldTitle"] = Oldds.Tables[0].Rows[i]["UserFieldTitle"];
+                        row["UserIsVisible"] = Oldds.Tables[0].Rows[i]["UserIsVisible"];
+
+                        ds.Tables[0].Rows.Add(row);
+                    }
+
+                    if ((_SortID == i) && (_SortID > 0))
+                    {
+                        ds.Tables[0].Rows.Add(OldRow);
+                    }
+                }
+
+                gvLists.DataSource = ds.Tables[0].DefaultView;
+                gvLists.DataBind();
+            }
+            else if (e.CommandName == "Down")
+            {
+                DataSet Oldds = LoadOldPackToolMember("");
+
+                int _SortID = int.Parse(e.CommandArgument.ToString());
+
+                DataSet ds = SysClass.SysUserSalary.GetUserSalarySetFieldsLstByDataSet(_UserSalarySetID, " AND 1<>1");
+
+                DataRow OldRow = ds.Tables[0].NewRow();
+
+                for (int i = 0; i < Oldds.Tables[0].Rows.Count; i++)
+                {
+                    if (i == _SortID)
+                    {
+                        OldRow["TableRecGuid"] = Oldds.Tables[0].Rows[i]["TableRecGuid"].ToString();
+                        OldRow["ID"] = int.Parse(Oldds.Tables[0].Rows[i]["ID"].ToString());
+                        OldRow["FieldName"] = Oldds.Tables[0].Rows[i]["FieldName"].ToString();
+                        OldRow["FieldType"] = int.Parse(Oldds.Tables[0].Rows[i]["FieldType"].ToString());
+                        OldRow["UserFieldTitle"] = Oldds.Tables[0].Rows[i]["UserFieldTitle"].ToString();
+                        OldRow["UserIsVisible"] = int.Parse(Oldds.Tables[0].Rows[i]["UserIsVisible"].ToString());
+                    }
+                    else
+                    {
+                        DataRow row = ds.Tables[0].NewRow();
+
+                        row["TableRecGuid"] = Oldds.Tables[0].Rows[i]["TableRecGuid"];
+                        row["ID"] = Oldds.Tables[0].Rows[i]["ID"];
+                        row["FieldName"] = Oldds.Tables[0].Rows[i]["FieldName"];
+                        row["FieldType"] = int.Parse(Oldds.Tables[0].Rows[i]["FieldType"].ToString());
+                        row["UserFieldTitle"] = Oldds.Tables[0].Rows[i]["UserFieldTitle"];
+                        row["UserIsVisible"] = Oldds.Tables[0].Rows[i]["UserIsVisible"];
+
+                        ds.Tables[0].Rows.Add(row);
+                    }
+
+                    if (((_SortID == i - 1) && (_SortID < Oldds.Tables[0].Rows.Count - 1)) ||
+                                ((_SortID == Oldds.Tables[0].Rows.Count - 1) && (_SortID == i)))
+                    {
+                        ds.Tables[0].Rows.Add(OldRow);
+                    }
+                }
+
+                gvLists.DataSource = ds.Tables[0].DefaultView;
+                gvLists.DataBind();
+            }
+        }
+        private DataSet LoadDefaultPackToolMember()
+        {
+            DataSet ds = SysClass.SysUserSalary.GetUserSalarySetFieldsLstByDataSet(0, "");
+
+            for (int i = 0; i < ds.Tables[0].Rows.Count; i++)
+            {
+                ds.Tables[0].Rows[i]["ID"] = ((Label)gvLists.Rows[i].Cells[1].FindControl("lblID")).Text;
+                ds.Tables[0].Rows[i]["TableRecGuid"] = ((Label)gvLists.Rows[i].Cells[1].FindControl("lblTableRecGuid")).Text;
+                ds.Tables[0].Rows[i]["FieldName"] = ((Label)gvLists.Rows[i].Cells[1].FindControl("lblFieldName")).Text;
+                ds.Tables[0].Rows[i]["FieldType"] = ((Label)gvLists.Rows[i].Cells[2].FindControl("lblFieldType")).Text;
+                ds.Tables[0].Rows[i]["UserFieldTitle"] = ((TextBox)gvLists.Rows[i].Cells[3].FindControl("txtUserFieldTitle")).Text;
+
+                if (((CheckBox)gvLists.Rows[i].Cells[4].FindControl("chkIsVisible")).Checked)
+                {
+                    ds.Tables[0].Rows[i]["UserIsVisible"] = 1;
+                }
+                else
+                {
+                    ds.Tables[0].Rows[i]["UserIsVisible"] = 0;
+                }
+
+                ds.Tables[0].Rows[i]["SortID"] = i;
+            }
+
+            return ds;
+        }
+        private DataSet LoadOldPackToolMember(string DeleteRecGuids)
+        {
+            DataSet ds = new DataSet();
+            if (_UserSalarySetID != 0)
+                ds = SysClass.SysUserSalary.GetUserSalarySetFieldsLstByDataSet(_UserSalarySetID, "");
+            for (int i = 0; i < gvLists.Rows.Count; i++)
+            {
+                DataRow row = ds.Tables[0].NewRow();
+                row["TableRecGuid"] = ((Label)gvLists.Rows[i].Cells[1].FindControl("lblTableRecGuid")).Text;
+                row["ID"] = ((Label)gvLists.Rows[i].Cells[1].FindControl("lblID")).Text;
+                row["FieldName"] = ((Label)gvLists.Rows[i].Cells[1].FindControl("lblFieldName")).Text;
+                row["FieldType"] = ((Label)gvLists.Rows[i].Cells[2].FindControl("lblFieldType")).Text;
+
+                row["UserFieldTitle"] = ((TextBox)gvLists.Rows[i].Cells[3].FindControl("txtUserFieldTitle")).Text;
+
+                if (((CheckBox)gvLists.Rows[i].Cells[4].FindControl("chkIsVisible")).Checked)
+                {
+                    row["UserIsVisible"] = 1;
+                }
+                else
+                {
+                    row["UserIsVisible"] = 0;
+                }
+                
+                row["SortID"] = i;
+                
+                if (DeleteRecGuids.IndexOf("," + row["TableRecGuid"].ToString() + ",") < 0)
+                {
+                    ds.Tables[0].Rows.Add(row);
+                }
+            }
+
+            return ds;
+        }
+
+        //Add by lk 20151214 start
+        private string GetUpdUserSalaryFieldsInfoSQL()
+        {
+            string sUpdateSQL = "";
+
+            for (int i = 0; i < gvLists.Rows.Count; i++)
+            {
+                sUpdateSQL += " Update UserSalaryFields_Info Set ";
+                sUpdateSQL += " FieldTitle='" + ((TextBox)gvLists.Rows[i].Cells[3].FindControl("txtUserFieldTitle")).Text + "'";
+                if (((CheckBox)gvLists.Rows[i].Cells[4].FindControl("chkIsVisible")).Checked)
+                {
+                    sUpdateSQL += " , IsVisible= 1";
+                }
+                else
+                {
+                    sUpdateSQL += " , IsVisible= 0";
+                }
+                sUpdateSQL += ", SortID=" + (i+1).ToString();
+                sUpdateSQL += " Where FieldName = '" + ((Label)gvLists.Rows[i].Cells[1].FindControl("lblFieldName")).Text +"';";
+            }
+
+            return sUpdateSQL;
+        }    
+        //Add by lk 20151214 end
+    }
+}

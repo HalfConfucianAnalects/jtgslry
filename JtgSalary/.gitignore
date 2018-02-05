@@ -1,0 +1,8 @@
+*.suo
+*.sdf
+[Dd]ebug/
+[Rr]elease/
+App_Data/JtgSalary/TMSData.mdf
+App_Data/JtgSalary/TMSData_log.ldf
+bin/
+Bin/

@@ -1,0 +1,10 @@
+SCC = This is a Source Code Control file.
+
+[EmergencySys.sln]
+SCC_Aux_Path = 192.168.1.122:8877:EmergencySys
+SCC_Project_Name = $/EmergencySys
+
+[EmergencySys.csproj]
+SCC_Aux_Path = 192.168.1.122:8877:EmergencySys
+SCC_Project_Name = $/EmergencySys
+
